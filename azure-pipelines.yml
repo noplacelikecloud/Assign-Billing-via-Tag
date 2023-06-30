@@ -1,0 +1,64 @@
+# Publish Bicep Artifacts
+
+trigger: 
+  branches:
+    include: 
+    - master
+  paths:
+    include:
+    - function-app
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+- stage: copy_modules_python
+  displayName: Copy Python Module Artifacts
+  jobs:
+  - job: copy_modules_python
+    displayName: Copy and Publish Modules
+    steps:
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: '3.9'
+          addToPath: true
+          architecture: 'x64'
+      - task: Bash@3
+        inputs:
+          targetType: 'inline'
+          workingDirectory: $(System.DefaultWorkingDirectory)/function-app
+          script: |
+            python -m venv antenv
+            source antenv/bin/activate
+            python -m pip install --upgrade pip
+            pip install setup
+            pip install --target="./.python_packages/lib/site-packages" -r requirements.txt
+
+      - task: CopyFiles@2
+        inputs:
+          SourceFolder: '$(System.DefaultWorkingDirectory)/function-app'
+          Contents: '**'
+          TargetFolder: '$(Build.BinariesDirectory)'
+      
+      - task: ArchiveFiles@2
+        inputs:
+          rootFolderOrFile: '$(Build.BinariesDirectory)'
+          includeRootFolder: false
+          archiveType: 'zip'
+          archiveFile: '$(System.DefaultWorkingDirectory)/output/$(Build.BuildId).zip'
+          replaceExistingArchive: true
+
+      - task: CopyFiles@2
+        displayName: Copy Modules
+        inputs: 
+          SourceFolder: '$(System.DefaultWorkingDirectory)/output'
+          Contents: '**'
+          TargetFolder: $(Build.ArtifactStagingDirectory)
+          
+      
+      - task: PublishBuildArtifacts@1
+        displayName: Publish Modules
+        inputs:
+          PathtoPublish: $(Build.ArtifactStagingDirectory)
+          ArtifactName: 'python-modules'
+          publishLocation: 'Container'
